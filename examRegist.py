@@ -104,6 +104,7 @@ def main():
         driver.get("https://my.tudelft.nl/#/inschrijven/mijn-inschrijvingen")
         print(driver.page_source)
 
-    #quit(driver)
+    input("Press any key to quit...")
+    quit(driver)
 
 main()
