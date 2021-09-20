@@ -49,8 +49,9 @@ def loginAndGetCourses(password = None):
         driver = webdriver.Firefox(executable_path="geckodriver.exe", options=driverOptions)
     except Exception as e:
         print(f"\tAn exception occured:\n{e}")
-        print("\nAborting...")
-        return
+        print("\nAborting (webdriver)...")
+        return False
+
     print("Creating session...")
     with rq.session() as s:
         print("Retrieving login page...")
@@ -72,7 +73,7 @@ def loginAndGetCourses(password = None):
         print("Login succeeded: " + str(loginSucceeded))
         if (not loginSucceeded):
             print("Aborting (login credentials)...")
-            return
+            return False
 
         SAMLResponse = getValueByName(r.text, "SAMLResponse")
         print(f"SAMLResponse retrieved... ({SAMLResponse[0:10]}...)")
@@ -179,6 +180,7 @@ def loginAndGetCourses(password = None):
     print(f"New DF: \n{df}")
     df.to_csv("courses.csv")
     quit(driver)
+    return True
 
 def getCourseCodesManually():
     specialChars = "@ _ ! # $ % ^ & * ( ) < > ? / \ | { } ~ : . ; [ ]"
@@ -253,9 +255,9 @@ def runScript(addCourses):
         password = creds.credPass
     except:
         password = getPassword()
-    loginAndGetCourses(password)
-    print("Cycle completed!")
-    print("Script ended successfully...")
+    wasSuccess = loginAndGetCourses(password)
+    print(f"Cycle completed successfully: {wasSuccess}")
+    print("Script ended without error...")
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument("--addCourses", nargs="?", type=bool, default=False, const=True)
