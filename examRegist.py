@@ -4,8 +4,9 @@ import urllib.parse as urlparse
 import getpass
 import pandas as pd
 import notify_run as nr
-import json
 import time
+import creds
+import argparse
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
@@ -19,6 +20,7 @@ MOBILE = 1
 PRE_LOGIN_URL = "https://auth-app-tu-delft-prd-tu-delft.xpaas.caci.nl/oauth2/authorize?response_type=token&client_id=osiris-student-mobile-prd&redirect_uri=https://my.tudelft.nl"
 PAYLOAD_URL = "https://login.tudelft.nl/sso/module.php/core/loginuserpass.php"
 COURSE_SEARCH_XPATH = "/html/body/ion-app/ng-component/ion-split-pane/ion-nav/page-enroll-exam/enroll-base-component/osi-page-left/ion-content/div[2]/div/osi-enroll-exam-flow/div/div/osi-course-enroll-search/osi-elastic-search/ion-row/ion-col[2]/div/div/div[1]/div[2]/div/ion-searchbar/div/input"
+NOTIFY_RUN_ENDPOINT = "https://notify.run/c/8gAdT6Ns7NIlsL07"
 
 def getPassword() -> str:
     password = getpass.getpass("Enter password: ")
@@ -36,13 +38,15 @@ def getValueByName(pageText, name) -> str:
     return value
 
 def quit(driver):
-    print("Closing...")
+    print("Closing driver...")
     driver.quit()
 
-def main():
+def loginAndGetCourses(password = None):
     print("Creating webdriver...")
     try:
-        driver = webdriver.Firefox(executable_path="geckodriver.exe")
+        driverOptions = webdriver.FirefoxOptions()
+        driverOptions.headless = False
+        driver = webdriver.Firefox(executable_path="geckodriver.exe", options=driverOptions)
     except Exception as e:
         print(f"\tAn exception occured:\n{e}")
         print("\nAborting...")
@@ -57,7 +61,7 @@ def main():
 
         payload = {
             "username" : "jreaves",
-            "password" : getPassword(),
+            "password" : (getPassword() if (password == None) else password),
             "AuthState" : str(authState)
         }
 
@@ -106,33 +110,74 @@ def main():
         driver.get("https://my.tudelft.nl/#/inschrijven/toets/:id")
         waitForElementByClass("searchbar-input", driver)
 
-        courseData = list(getAndSaveCoursesToCSV())
+        availableSignUps = ""
+        courseData = list(getAndSaveCoursesToCSV("n"))
+        adjustedCourses = []
         for course in courseData[:]:
-            if (course[2] == True):
+            time.sleep(1)
+            if (course[1] == True):
                 continue
 
-            print(f"Looking for {course[1]}...")
-            driver.find_element_by_xpath(COURSE_SEARCH_XPATH).send_keys(str(course[1]))
+            print(f"Looking for {course[0]}...")
+            driver.find_element_by_xpath(COURSE_SEARCH_XPATH).send_keys(str(course[0]))
             hasResult = False
             i = 0
             while (hasResult != True and i < 5):
                 time.sleep(1)
-                hasResult = scriptSearchInPage(driver, str(course[1]))
-                print(f"\tSeconds passed: {i}")
+                print(f"\tSeconds passed: {i+1}")
+                hasResult = scriptSearchInPage(driver, str(course[0]))
+                if (scriptSearchInPage(driver, "Geen zoekresultaten")):
+                    print(f"There was no course with code '{course[0]}' found...")
+                    break
                 i += 1
 
-            driver.find_element_by_xpath(COURSE_SEARCH_XPATH).send_keys(Keys.CONTROL + "a")
-            driver.find_element_by_xpath(COURSE_SEARCH_XPATH).send_keys(Keys.BACK_SPACE)
             if (not hasResult):
+                driver.find_element_by_xpath(COURSE_SEARCH_XPATH).send_keys(Keys.CONTROL + "a")
+                driver.find_element_by_xpath(COURSE_SEARCH_XPATH).send_keys(Keys.BACK_SPACE)
                 continue
-            msg = f"The course '{course[1]}' is available for sign up!"
-            print(msg)
-            notify = nr.Notify("https://notify.run/c/8gAdT6Ns7NIlsL07")
-            notify.send(msg)
+            signedIn = course[1]
+            print("Found course, verifying...")
+            i = 0
+            try:
+                driver.find_element_by_css_selector(".osi-ion-item.ng-star-inserted").click()
+            except:
+                print("WARNING! There was an error while verifying the ability to sign up...")
+                i = 5 #The page didn't load so there is no point for the while loop
+            while (not signedIn and i < 5):
+                time.sleep(1)
+                print(f"\tSeconds passed: {i+1}")
+                if (scriptSearchInPage(driver, "Selecteer een toetsgelegenheid")):
+                    print(f"The course '{course[0]}' is available for sign up!")
+                    availableSignUps += f"{course[0]} "
+                    break
+                elif (scriptSearchInPage(driver, "Helaas")):
+                    print(f"Congratulations! There are no open sign ups for course {course[0]}")
+                    course[1] = True
+                    break
+                i += 1
+            driver.get("https://my.tudelft.nl/#/home")
+            waitForElementByClass("osi-last-login", driver)
 
-        #driver.get("https://my.tudelft.nl/student/osiris/student/cursussen_voor_toetsinschrijving/te_volgen_onderwijs/open_voor_inschrijving/?limit=9999")
+            print("Reloading the sign up page...")
+            driver.get("https://my.tudelft.nl/#/inschrijven/toets/:id")
+            waitForElementByClass("searchbar-input", driver)
 
-    input("Press any key to quit...")
+    print("All checkups completed!")
+    if (availableSignUps != ""):
+        print("Found courses available for sign up...")
+        msg = f"Course(s) {availableSignUps} available for sign up!"
+    else:
+        print("No open courses found!")
+        msg = f"No open sign ups found! Congrats!"
+    print("Sending notification...")
+    notify = nr.Notify(NOTIFY_RUN_ENDPOINT)
+    notify.send(msg)
+    print("Adjusting CSV signed up column...")
+    for course in courseData:
+        adjustedCourses.append([course[0], course[1]])
+    df = pd.DataFrame(adjustedCourses)
+    print(f"New DF: \n{df}")
+    df.to_csv("courses.csv")
     quit(driver)
 
 def getCourseCodesManually():
@@ -160,36 +205,25 @@ def formatCourses(courses):
     print(courseList)
     return courseList
 
-def getAndSaveCoursesToCSV() -> list:
+def getAndSaveCoursesToCSV(doAppend = "y") -> list:
     courseData = []
     try:
-        df = pd.read_csv("courses.csv")
-        print(df)
+        df = pd.read_csv("courses.csv", usecols=[1,2])
         courseData = df.values.tolist()
         print("Existing courses found!")
-        print(courseData)
-        doAppend = input("Do you want to enter more? (Y/N): ")
+        print(f"Old DF: \n{df}")
+        if (doAppend != "n"): doAppend = input("Do you want to enter more? (Y/N): ")
     except:
         print("No courses found!")
         doAppend = "y"
     
     if (doAppend.lower() == "y"):
-        courseList = getCourseCodesManually()
-        for course in courseList:
-            courseData.append([course, False])
-        print(courseData)
-        df = pd.DataFrame(courseData)
-        print(df.values)
+        newCourses = getCourseCodesManually()
+        newCourseData = rebuildDataframe(newCourses, courseData)
+        df = pd.DataFrame(newCourseData)
+        print(f"New DF: \n{df}")
         df.to_csv("courses.csv")
     return courseData
-
-def getCoursePagePayload():
-    payload = json.loads('{"items":[{"hidden":false,"filter":"mijn-programma","criterium":"examenonderdelen.id_examenonderdeel","titel":"Mijn programma","waarde":null,"weergave":"UIT","toon_maximaal":null,"mag_wijzigen":"J","sortering":"asc","uitsluiten":null,"genest":"N"},{"hidden":false,"filter":"trefwoord","criterium":"trefwoord","titel":"Cursuscode/naam","waarde":null,"weergave":null,"toon_maximaal":null,"mag_wijzigen":"J","sortering":"asc","uitsluiten":null,"genest":"N"},{"hidden":false,"filter":"alleen-open-toetsinschrijving","criterium":"inschrijfperiodes_toets.datum_vanaf","titel":"Alleen open voor toetsinschrijving","waarde":["J"],"weergave":null,"toon_maximaal":null,"mag_wijzigen":"J","sortering":"asc","uitsluiten":null,"genest":"N","checked":true},{"hidden":false,"filter":"alleen-vaste-programma","criterium":"programma","titel":"Alleen uit mijn vaste programma","waarde":null,"weergave":null,"toon_maximaal":null,"mag_wijzigen":"J","sortering":"asc","uitsluiten":null,"genest":"N","checked":false},{"hidden":false,"filter":"collegejaar","criterium":"collegejaar","titel":"Collegejaar","waarde":[2021],"weergave":"UIT","toon_maximaal":2,"mag_wijzigen":"J","sortering":"asc","uitsluiten":null,"genest":"N"},{"hidden":false,"filter":"faculteit","criterium":"faculteit_naam","titel":"Faculteit","waarde":null,"weergave":"IN","toon_maximaal":null,"mag_wijzigen":"J","sortering":"asc","uitsluiten":null,"genest":"N"}],"cursus_ids":[104597,104584]}')
-    return payload
-
-def getCourseSearchPayload(courseCode):
-    payload = {"from":25,"size":25,"sort":[{"cursus_lange_naam.raw":{"order":"asc"}},{"cursus":{"order":"asc"}},{"collegejaar":{"order":"desc"}}],"aggs":{"agg_terms_inschrijfperiodes_toets.datum_vanaf":{"filter":{"bool":{"must":[{"terms":{"collegejaar":[2021]}},{"range":{"inschrijfperiodes_toets.datum_vanaf":{"lte":"now"}}},{"range":{"inschrijfperiodes_toets.datum_tm":{"gte":"now"}}}]}},"aggs":{"agg_inschrijfperiodes_toets.datum_vanaf_buckets":{"terms":{"field":"inschrijfperiodes_toets.datum_vanaf","size":2500,"order":{"_term":"asc"}}}}},"agg_terms_programma":{"filter":{"bool":{"must":[{"terms":{"collegejaar":[2021]}},{"terms":{"id_cursus":[-1]}}]}},"aggs":{"agg_programma_buckets":{"terms":{"field":"programma","size":2500,"order":{"_term":"asc"}}}}},"agg_terms_collegejaar":{"filter":{"bool":{"must":[]}},"aggs":{"agg_collegejaar_buckets":{"terms":{"field":"collegejaar","size":2500,"order":{"_term":"asc"}}}}},"agg_terms_faculteit_naam":{"filter":{"bool":{"must":[{"terms":{"collegejaar":[2021]}}]}},"aggs":{"agg_faculteit_naam_buckets":{"terms":{"field":"faculteit_naam","size":2500,"order":{"_term":"asc"}}}}}},"post_filter":{"bool":{"must":[{"terms":{"collegejaar":[2021]}}]}},"query":{"bool":{"must":[{"range":{"inschrijfperiodes_toets.datum_vanaf":{"lte":"now"}}},{"range":{"inschrijfperiodes_toets.datum_tm":{"gte":"now"}}},{"multi_match":{"query":str(courseCode),"type":"phrase_prefix","fields":["cursus","cursus_korte_naam","cursus_lange_naam"],"max_expansions":200}}]}}}
-    return payload
 
 def waitForElementByClass(className, driver, timeout=30):
     try:
@@ -197,11 +231,33 @@ def waitForElementByClass(className, driver, timeout=30):
         WebDriverWait(driver, timeout).until(elementPresent)
     except TimeoutException:
         print("\tTimed out...")
-        driver.close()
+        quit(driver)
 
-def scriptSearchInPage(driver, course) -> bool:
-    return driver.execute_script('return document.body.innerHTML.includes("LB2630")')
+def scriptSearchInPage(driver, query) -> bool:
+    return driver.execute_script(f'return document.body.innerHTML.includes("{query}")')
 
+def rebuildDataframe(newCourses : list, oldCourseData : list):
+    allCourses = []
+    for course in oldCourseData:
+        allCourses.append([course[0], course[1]])
+    for course in newCourses:
+        allCourses.append([course, False])
+    return allCourses
 
-#getAndSaveCoursesToCSV()
-main()
+def runScript(addCourses):
+    print("Starting script...")
+    print(f"Add courses: {addCourses}")
+    if (addCourses):
+        getAndSaveCoursesToCSV()
+    try:
+        password = creds.credPass
+    except:
+        password = getPassword()
+    loginAndGetCourses(password)
+    print("Cycle completed!")
+    print("Script ended successfully...")
+
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument("--addCourses", nargs="?", type=bool, default=False, const=True)
+args = parser.parse_args()
+runScript(args.addCourses)
