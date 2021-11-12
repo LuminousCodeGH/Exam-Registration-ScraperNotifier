@@ -1,8 +1,8 @@
 ,0,1
 0,LB1234,False
 1,LB1211,True
-2,LB2630,False
-3,LB2031,False
+2,LB2630,True
+3,LB2031,True
 4,LB2311,False
 5,LB2791-P,False
 6,LB2771,False
@@ -11,3 +11,4 @@
 9,LB2301,True
 10,LB2261,False
 11,LB2532,False
+12,LB1305,False
