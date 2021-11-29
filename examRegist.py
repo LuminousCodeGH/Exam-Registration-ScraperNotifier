@@ -127,15 +127,14 @@ def save_adjusted_courses(adjusted_course_list, course_data):
     df.to_csv("courses.csv")
 
 def send_email(available_sign_ups : str):
-        port = 465
-        smtp_server_domain = "smtp.gmail.com"
+        port = 587
+        smtp_server_domain = "smtp.mail.yahoo.com"
         sender_mail = SENDER
         sender_pass = creds.mail_pass
 
         print("Sending mail...")
         try:
-            ssl_context = ssl.create_default_context()
-            service = smtplib.SMTP_SSL(smtp_server_domain, port, context=ssl_context)
+            service = smtplib.SMTP(smtp_server_domain, port)
             service.login(sender_mail, sender_pass)
             mail_result = service.sendmail(sender_mail, creds.receiver_mail, f"Subject: open sign ups!\nThese exams are available for sign up: {available_sign_ups}")
             service.quit()
