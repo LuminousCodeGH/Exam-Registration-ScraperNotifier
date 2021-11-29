@@ -131,12 +131,13 @@ def send_email(available_sign_ups : str):
         smtp_server_domain = "smtp.mail.yahoo.com"
         sender_mail = SENDER
         sender_pass = creds.mail_pass
+        receiver = RECEIVER
 
         print("Sending mail...")
         try:
             service = smtplib.SMTP(smtp_server_domain, port)
             service.login(sender_mail, sender_pass)
-            mail_result = service.sendmail(sender_mail, creds.receiver_mail, f"Subject: open sign ups!\nThese exams are available for sign up: {available_sign_ups}")
+            mail_result = service.sendmail(sender_mail, receiver, f"Subject: Open sign ups!\nThe bot says: 'SIGN UP TO THESE COURSES!: {available_sign_ups}'")
             service.quit()
             print(f"\tSuccess!")
         except Exception as e:
@@ -261,7 +262,6 @@ def login_and_get_courses(driver, password = None, check_resits = False):
         send_email(available_sign_ups)
     else:
         print("No open courses found!")
-        send_email("LB_TEST")
     
     save_adjusted_courses(adjusted_course_list, course_data)
 
@@ -270,6 +270,7 @@ def login_and_get_courses(driver, password = None, check_resits = False):
 def run_script(add_courses, check_resits):
     print("Starting script...")
     print(f"Add courses: {add_courses}")
+    print(f"Check for resits: {check_resits}")
     if (add_courses):
         get_and_save_courses_to_csv()
     try:
