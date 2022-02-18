@@ -7,16 +7,8 @@ To run the program you simply need to run one of the included batch files, which
   - The runAddCourses.cmd allows you to add courses prior to executing everything like the run.cmd would.
   - The runCheckResits.cmd checks all courses for exams regardless of whether the user had already signed up for them or not, useful for courses with multiple exams!
 
-To have it working properly a creds.py file is required, which is not provided since it contains sensitive data like logins and secure webpage structure.
-Additionally the user should have the following python3 libraries:
-  - requests
-  - urllib.parse
-  - getpass
-  - pandas
-  - smtplib
-  - ssl
-  - time
-  - argparse
-  - selenium
+To have it working properly a creds.py file is required. A credsTemplate.py is provided but the request URLs have been left out on purpose.
+These URLs are necessary to run the program so if you really want to make use of this contact me or figure the URLs out yourself.
+Lastly, the user should have installed the python libraries provided in the requirements.txt.
   
 It is recommended to have either the run.cmd or runCheckResists.cmd running on a schedule with a random time offset, using windows scheduler for example.
