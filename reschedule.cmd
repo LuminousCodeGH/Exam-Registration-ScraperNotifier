@@ -1,1 +1,0 @@
-schtasks /sc ONCE /tr "C:\Users\jacob\Documents\OsirisExamRegistration\examRegist\examRegist.py"
