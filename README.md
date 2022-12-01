@@ -1,6 +1,6 @@
 # Exam registration (Outdated)
 
-This program is outdated and is or will be made read-only or private. A new version of this program can be found [here]("https://github.com/LuminousCodeGH/RegistrateTUD").
+This program is outdated and is or will be made read-only or private. A new version of this program can be found [here](https://github.com/LuminousCodeGH/RegistrateTUD).
 
 The program notifies you periodically if there is an open sign up for an exam specified by the user.
 
